@@ -1,0 +1,639 @@
+{% extends "base.html" %}
+
+{% block title %}Drift Analysis - Cybersecurity Drift Detection{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Page Header -->
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-1">
+                    <i class="fas fa-chart-line me-2 text-primary"></i>
+                    Drift Analysis
+                </h2>
+                <p class="text-muted mb-0">Detailed analysis of concept drift in cybersecurity features</p>
+            </div>
+            <div class="btn-group">
+                <button type="button" class="btn btn-primary" onclick="runDriftAnalysis()">
+                    <i class="fas fa-play me-1"></i>Run Analysis
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="exportResults()">
+                    <i class="fas fa-download me-1"></i>Export
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Controls -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-sliders-h me-2"></i>Analysis Configuration
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label for="driftTypeSelect" class="form-label">Drift Type</label>
+                        <select class="form-select" id="driftTypeSelect">
+                            <option value="gradual">Gradual Drift</option>
+                            <option value="sudden">Sudden Drift</option>
+                            <option value="ddos">DDoS Attack</option>
+                            <option value="exfiltration">Data Exfiltration</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="sensitivitySlider" class="form-label">Detection Sensitivity</label>
+                        <input type="range" class="form-range" id="sensitivitySlider" min="1" max="10" value="5">
+                        <small class="text-muted">Current: <span id="sensitivityValue">5</span></small>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="timeWindowSelect" class="form-label">Time Window</label>
+                        <select class="form-select" id="timeWindowSelect">
+                            <option value="1h">Last Hour</option>
+                            <option value="6h">Last 6 Hours</option>
+                            <option value="24h" selected>Last 24 Hours</option>
+                            <option value="7d">Last 7 Days</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="button" class="btn btn-success w-100" onclick="applyFilters()">
+                            <i class="fas fa-filter me-1"></i>Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Results -->
+    <div class="col-lg-8">
+        <!-- Feature Drift Analysis -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Feature Drift Analysis
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="featureDriftChart" style="height: 500px;"></div>
+            </div>
+        </div>
+
+        <!-- Distribution Comparison -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-area me-2"></i>Distribution Comparison
+                </h5>
+                <select class="form-select w-auto" id="featureSelect" onchange="updateDistributionChart()">
+                    <option value="">Select Feature...</option>
+                </select>
+            </div>
+            <div class="card-body">
+                <div id="distributionChart" style="height: 400px;"></div>
+            </div>
+        </div>
+
+        <!-- Model Performance Trend -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Model Performance Trend
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="performanceChart" style="height: 400px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Sidebar -->
+    <div class="col-lg-4">
+        <!-- Drift Summary -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-clipboard-list me-2"></i>Drift Summary
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="driftSummary">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-chart-line fa-3x mb-3"></i>
+                        <p>Run analysis to see drift summary</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature Rankings -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-list-ol me-2"></i>Most Drifted Features
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="featureRankings">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-sort-amount-down fa-3x mb-3"></i>
+                        <p>No drift data available</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Insights -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-shield-alt me-2"></i>Security Insights
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="securityInsights">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-search fa-3x mb-3"></i>
+                        <p>Security analysis will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recommended Actions -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-tasks me-2"></i>Recommended Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="recommendedActions">
+                    <div class="text-center text-muted">
+                        <i class="fas fa-lightbulb fa-3x mb-3"></i>
+                        <p>Recommendations will appear here</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feature Detail Modal -->
+<div class="modal fade" id="featureDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Feature Analysis Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Statistical Metrics</h6>
+                        <div id="featureStatistics"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Security Implications</h6>
+                        <div id="featureSecurityAnalysis"></div>
+                    </div>
+                </div>
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <h6>Detailed Comparison Chart</h6>
+                        <div id="featureDetailChart" style="height: 400px;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="exportFeatureData()">Export Data</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Drift Analysis Page JavaScript
+let analysisData = {};
+let currentFeature = null;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDriftAnalysis();
+    setupAnalysisControls();
+});
+
+// Initialize drift analysis page
+function initializeDriftAnalysis() {
+    // Setup sensitivity slider
+    const sensitivitySlider = document.getElementById('sensitivitySlider');
+    const sensitivityValue = document.getElementById('sensitivityValue');
+    
+    sensitivitySlider.addEventListener('input', function() {
+        sensitivityValue.textContent = this.value;
+    });
+
+    // Initialize empty charts
+    createEmptyChart('featureDriftChart', 'Run analysis to see feature drift data');
+    createEmptyChart('distributionChart', 'Select a feature to view distribution comparison');
+    createEmptyChart('performanceChart', 'Model performance data will appear here');
+    
+    // Load any existing analysis data
+    loadExistingAnalysis();
+}
+
+// Setup analysis controls
+function setupAnalysisControls() {
+    // Populate feature select
+    const featureSelect = document.getElementById('featureSelect');
+    const features = [
+        'packet_size', 'flow_duration', 'bytes_sent', 'bytes_received',
+        'packet_count', 'protocol_type', 'port_number', 'tcp_flags',
+        'payload_entropy', 'connection_frequency', 'time_between_packets',
+        'unique_destinations', 'failed_connections', 'suspicious_ports',
+        'anomalous_payload_size', 'unusual_timing_patterns'
+    ];
+    
+    features.forEach(feature => {
+        const option = document.createElement('option');
+        option.value = feature;
+        option.textContent = feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        featureSelect.appendChild(option);
+    });
+}
+
+// Run drift analysis
+async function runDriftAnalysis() {
+    showLoading();
+    
+    try {
+        const driftType = document.getElementById('driftTypeSelect').value;
+        const sensitivity = document.getElementById('sensitivitySlider').value;
+        const timeWindow = document.getElementById('timeWindowSelect').value;
+        
+        // Simulate drift and get analysis
+        const result = await getDriftSimulation(driftType);
+        
+        if (result.success) {
+            analysisData = result;
+            updateAnalysisDisplay();
+            showNotification('success', 'Drift analysis completed successfully');
+        } else {
+            showNotification('error', 'Failed to run drift analysis');
+        }
+    } catch (error) {
+        showNotification('error', 'Error running analysis: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Update analysis display
+function updateAnalysisDisplay() {
+    updateDriftSummary();
+    updateFeatureRankings();
+    updateSecurityInsights();
+    updateRecommendedActions();
+    updateFeatureDriftChart();
+    updatePerformanceChart();
+    
+    // Update feature select
+    const featureSelect = document.getElementById('featureSelect');
+    if (featureSelect.value) {
+        updateDistributionChart();
+    }
+}
+
+// Update drift summary
+function updateDriftSummary() {
+    const driftResults = analysisData.drift_results || {};
+    const summary = document.getElementById('driftSummary');
+    
+    const highDriftCount = Object.values(driftResults).filter(r => r.drift_severity === 'HIGH').length;
+    const mediumDriftCount = Object.values(driftResults).filter(r => r.drift_severity === 'MEDIUM').length;
+    const totalFeatures = Object.keys(driftResults).length;
+    
+    const avgPsiScore = totalFeatures > 0 ? 
+        Object.values(driftResults).reduce((sum, r) => sum + r.psi_score, 0) / totalFeatures : 0;
+    
+    summary.innerHTML = `
+        <div class="row text-center">
+            <div class="col-6">
+                <div class="border-end">
+                    <h3 class="text-danger mb-1">${highDriftCount}</h3>
+                    <small class="text-muted">High Severity</small>
+                </div>
+            </div>
+            <div class="col-6">
+                <h3 class="text-warning mb-1">${mediumDriftCount}</h3>
+                <small class="text-muted">Medium Severity</small>
+            </div>
+        </div>
+        <hr>
+        <div class="row text-center">
+            <div class="col-6">
+                <div class="border-end">
+                    <h4 class="mb-1">${totalFeatures}</h4>
+                    <small class="text-muted">Total Features</small>
+                </div>
+            </div>
+            <div class="col-6">
+                <h4 class="mb-1">${avgPsiScore.toFixed(3)}</h4>
+                <small class="text-muted">Avg PSI Score</small>
+            </div>
+        </div>
+    `;
+}
+
+// Update feature rankings
+function updateFeatureRankings() {
+    const driftResults = analysisData.drift_results || {};
+    const rankings = document.getElementById('featureRankings');
+    
+    // Sort features by PSI score
+    const sortedFeatures = Object.entries(driftResults)
+        .sort(([,a], [,b]) => b.psi_score - a.psi_score)
+        .slice(0, 10);
+    
+    if (sortedFeatures.length === 0) {
+        rankings.innerHTML = '<p class="text-muted">No drift data available</p>';
+        return;
+    }
+    
+    rankings.innerHTML = sortedFeatures.map(([feature, result], index) => `
+        <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+            <div>
+                <span class="badge bg-primary me-2">${index + 1}</span>
+                <strong>${feature.replace(/_/g, ' ')}</strong>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-${getSeverityClass(result.drift_severity)} me-1">
+                    ${result.drift_severity}
+                </span>
+                <small class="text-muted">${result.psi_score.toFixed(3)}</small>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Update security insights
+function updateSecurityInsights() {
+    const explanations = analysisData.explanations || [];
+    const insights = document.getElementById('securityInsights');
+    
+    if (explanations.length === 0) {
+        insights.innerHTML = '<p class="text-muted">No security insights available</p>';
+        return;
+    }
+    
+    insights.innerHTML = explanations.slice(0, 5).map(explanation => {
+        const lines = explanation.split('\n').filter(line => line.trim());
+        const title = lines[0].replace(/\*/g, '');
+        const details = lines.slice(1).join('<br>');
+        
+        return `
+            <div class="alert alert-info mb-2">
+                <h6 class="alert-heading">${title}</h6>
+                <small>${details}</small>
+            </div>
+        `;
+    }).join('');
+}
+
+// Update recommended actions
+function updateRecommendedActions() {
+    const driftResults = analysisData.drift_results || {};
+    const actions = document.getElementById('recommendedActions');
+    
+    const highDriftFeatures = Object.entries(driftResults)
+        .filter(([,result]) => result.drift_severity === 'HIGH');
+    
+    let recommendations = [];
+    
+    if (highDriftFeatures.length > 0) {
+        recommendations.push({
+            icon: 'fas fa-exclamation-triangle text-danger',
+            title: 'Immediate Action Required',
+            description: `${highDriftFeatures.length} features show high drift. Model retraining recommended.`,
+            priority: 'high'
+        });
+    }
+    
+    if (analysisData.adaptation_needed) {
+        recommendations.push({
+            icon: 'fas fa-sync-alt text-warning',
+            title: 'Model Adaptation',
+            description: 'System recommends adaptive learning to handle drift.',
+            priority: 'medium'
+        });
+    }
+    
+    recommendations.push({
+        icon: 'fas fa-chart-line text-info',
+        title: 'Continue Monitoring',
+        description: 'Maintain current monitoring schedule for all features.',
+        priority: 'low'
+    });
+    
+    actions.innerHTML = recommendations.map(rec => `
+        <div class="d-flex align-items-start mb-3">
+            <div class="me-3">
+                <i class="${rec.icon} fa-lg"></i>
+            </div>
+            <div>
+                <h6 class="mb-1">${rec.title}</h6>
+                <small class="text-muted">${rec.description}</small>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Update feature drift chart
+function updateFeatureDriftChart() {
+    const driftResults = analysisData.drift_results || {};
+    
+    if (Object.keys(driftResults).length === 0) {
+        createEmptyChart('featureDriftChart', 'No drift data available');
+        return;
+    }
+    
+    const features = Object.keys(driftResults);
+    const psiScores = features.map(f => driftResults[f].psi_score);
+    const severities = features.map(f => driftResults[f].drift_severity);
+    
+    const colors = severities.map(s => {
+        switch(s) {
+            case 'HIGH': return '#dc3545';
+            case 'MEDIUM': return '#ffc107';
+            case 'LOW': return '#28a745';
+            default: return '#6c757d';
+        }
+    });
+    
+    const trace = {
+        x: features.map(f => f.replace(/_/g, ' ')),
+        y: psiScores,
+        type: 'bar',
+        marker: {color: colors},
+        hovertemplate: 'Feature: %{x}<br>PSI Score: %{y:.3f}<br>Severity: %{customdata}<extra></extra>',
+        customdata: severities
+    };
+    
+    const layout = {
+        title: 'Feature Drift Severity (PSI Scores)',
+        xaxis: {title: 'Features', tickangle: 45},
+        yaxis: {title: 'PSI Score'},
+        height: 500,
+        margin: {t: 60, r: 40, b: 120, l: 60}
+    };
+    
+    Plotly.newPlot('featureDriftChart', [trace], layout);
+}
+
+// Update distribution chart
+function updateDistributionChart() {
+    const featureSelect = document.getElementById('featureSelect');
+    const selectedFeature = featureSelect.value;
+    
+    if (!selectedFeature) {
+        createEmptyChart('distributionChart', 'Select a feature to view distribution');
+        return;
+    }
+    
+    // For demo purposes, generate synthetic distribution data
+    const baseline = Array.from({length: 1000}, () => Math.random() * 100);
+    const current = Array.from({length: 1000}, () => Math.random() * 120 + 10);
+    
+    const trace1 = {
+        x: baseline,
+        type: 'histogram',
+        name: 'Baseline',
+        opacity: 0.7,
+        marker: {color: '#007bff'},
+        nbinsx: 30
+    };
+    
+    const trace2 = {
+        x: current,
+        type: 'histogram',
+        name: 'Current',
+        opacity: 0.7,
+        marker: {color: '#fd7e14'},
+        nbinsx: 30
+    };
+    
+    const layout = {
+        title: `Distribution Comparison: ${selectedFeature.replace(/_/g, ' ')}`,
+        xaxis: {title: 'Value'},
+        yaxis: {title: 'Frequency'},
+        barmode: 'overlay',
+        height: 400,
+        margin: {t: 60, r: 40, b: 40, l: 60}
+    };
+    
+    Plotly.newPlot('distributionChart', [trace1, trace2], layout);
+}
+
+// Update performance chart
+function updatePerformanceChart() {
+    const performance = analysisData.performance || {};
+    
+    // Generate sample performance data
+    const timestamps = Array.from({length: 24}, (_, i) => {
+        const date = new Date();
+        date.setHours(date.getHours() - 23 + i);
+        return date.toISOString();
+    });
+    
+    const accuracy = timestamps.map(() => 0.85 + Math.random() * 0.1);
+    
+    const trace = {
+        x: timestamps,
+        y: accuracy,
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Model Accuracy',
+        line: {color: '#28a745', width: 3},
+        marker: {size: 6}
+    };
+    
+    const layout = {
+        title: 'Model Performance Over Time',
+        xaxis: {title: 'Time'},
+        yaxis: {title: 'Accuracy', range: [0.7, 1.0]},
+        height: 400,
+        margin: {t: 60, r: 40, b: 40, l: 60}
+    };
+    
+    Plotly.newPlot('performanceChart', [trace], layout);
+}
+
+// Apply filters
+function applyFilters() {
+    if (Object.keys(analysisData).length > 0) {
+        updateAnalysisDisplay();
+        showNotification('info', 'Filters applied to analysis');
+    } else {
+        showNotification('warning', 'No analysis data to filter. Run analysis first.');
+    }
+}
+
+// Export results
+function exportResults() {
+    if (Object.keys(analysisData).length === 0) {
+        showNotification('warning', 'No analysis data to export');
+        return;
+    }
+    
+    const exportData = {
+        timestamp: new Date().toISOString(),
+        drift_results: analysisData.drift_results,
+        explanations: analysisData.explanations,
+        performance: analysisData.performance,
+        configuration: {
+            drift_type: document.getElementById('driftTypeSelect').value,
+            sensitivity: document.getElementById('sensitivitySlider').value,
+            time_window: document.getElementById('timeWindowSelect').value
+        }
+    };
+    
+    downloadJSON(exportData, `drift_analysis_${new Date().toISOString().split('T')[0]}.json`);
+    showNotification('success', 'Analysis results exported successfully');
+}
+
+// Load existing analysis
+function loadExistingAnalysis() {
+    const saved = loadFromLocalStorage('drift_analysis_data');
+    if (saved && saved.timestamp) {
+        // Check if data is recent (within last hour)
+        const dataAge = Date.now() - new Date(saved.timestamp).getTime();
+        if (dataAge < 3600000) { // 1 hour
+            analysisData = saved;
+            updateAnalysisDisplay();
+        }
+    }
+}
+
+// Export feature data
+function exportFeatureData() {
+    if (!currentFeature || Object.keys(analysisData).length === 0) {
+        showNotification('warning', 'No feature data to export');
+        return;
+    }
+    
+    const featureData = {
+        feature: currentFeature,
+        drift_result: analysisData.drift_results[currentFeature],
+        timestamp: new Date().toISOString()
+    };
+    
+    downloadJSON(featureData, `feature_${currentFeature}_analysis.json`);
+}
+</script>
+{% endblock %}
