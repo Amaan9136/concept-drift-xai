@@ -24,7 +24,7 @@ class DriftConfig:
 @dataclass
 class FlaskConfig:
     """Flask application configuration"""
-    SECRET_KEY: str = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+    SECRET_KEY: str = os.environ.get('SECRET_KEY', 'test-sec-key')
     DEBUG: bool = os.environ.get('FLASK_ENV') == 'development'
     HOST: str = '0.0.0.0'
     PORT: int = int(os.environ.get('PORT', 5000))

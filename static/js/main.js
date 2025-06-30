@@ -8,7 +8,7 @@ let systemData = {};
 let refreshInterval;
 
 // Initialize on DOM content loaded
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     initializeApp();
 });
 
@@ -18,19 +18,19 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeApp() {
     // Initialize Bootstrap components
     loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
-    
+
     // Initialize tooltips
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
-    
+
     // Check system status
     checkSystemStatus();
-    
+
     // Set up periodic status checks
     refreshInterval = setInterval(checkSystemStatus, 30000); // Every 30 seconds
-    
+
     // Add event listeners
     setupEventListeners();
 }
@@ -47,7 +47,7 @@ async function checkSystemStatus() {
         }
     } catch (error) {
         console.error('Error checking system status:', error);
-        updateSystemStatus({initialized: false, error: true});
+        updateSystemStatus({ initialized: false, error: true });
     }
 }
 
@@ -57,9 +57,9 @@ async function checkSystemStatus() {
 function updateSystemStatus(status) {
     const statusIcon = document.getElementById('systemStatus');
     const statusText = document.getElementById('systemStatusText');
-    
+
     if (!statusIcon || !statusText) return;
-    
+
     if (status.initialized) {
         statusIcon.className = 'fas fa-circle text-success me-1';
         statusText.textContent = 'System Ready';
@@ -70,7 +70,7 @@ function updateSystemStatus(status) {
         statusIcon.className = 'fas fa-circle text-warning me-1';
         statusText.textContent = 'Initializing...';
     }
-    
+
     // Update alert count if available
     if (status.alerts_count !== undefined) {
         updateAlertCount(status.alerts_count);
@@ -118,10 +118,10 @@ function showNotification(type, message, duration = 5000) {
         ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
-    
+
     // Add to document
     document.body.appendChild(notification);
-    
+
     // Auto-remove after duration
     setTimeout(() => {
         if (notification.parentNode) {
@@ -135,14 +135,14 @@ function showNotification(type, message, duration = 5000) {
  */
 function setupEventListeners() {
     // Handle window beforeunload to clear intervals
-    window.addEventListener('beforeunload', function() {
+    window.addEventListener('beforeunload', function () {
         if (refreshInterval) {
             clearInterval(refreshInterval);
         }
     });
-    
+
     // Handle keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         // Ctrl+R or F5 to refresh
         if ((e.ctrlKey && e.key === 'r') || e.key === 'F5') {
             e.preventDefault();
@@ -150,7 +150,7 @@ function setupEventListeners() {
                 refreshDashboard();
             }
         }
-        
+
         // Escape to close modals
         if (e.key === 'Escape') {
             const modals = document.querySelectorAll('.modal.show');
@@ -180,11 +180,11 @@ async function apiRequest(url, options = {}) {
             },
             ...options
         });
-        
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         return await response.json();
     } catch (error) {
         console.error('API request failed:', error);
@@ -198,7 +198,7 @@ async function apiRequest(url, options = {}) {
 async function getDriftSimulation(driftType) {
     return await apiRequest('/api/drift/simulate', {
         method: 'POST',
-        body: JSON.stringify({drift_type: driftType})
+        body: JSON.stringify({ drift_type: driftType })
     });
 }
 
@@ -228,8 +228,8 @@ async function acknowledgeAlert(alertId) {
 function createEmptyChart(containerId, message = 'No data available') {
     const layout = {
         title: message,
-        xaxis: {visible: false},
-        yaxis: {visible: false},
+        xaxis: { visible: false },
+        yaxis: { visible: false },
         annotations: [{
             text: message,
             xref: 'paper',
@@ -239,12 +239,12 @@ function createEmptyChart(containerId, message = 'No data available') {
             xanchor: 'center',
             yanchor: 'middle',
             showarrow: false,
-            font: {size: 16, color: '#6c757d'}
+            font: { size: 16, color: '#6c757d' }
         }],
         height: 400,
-        margin: {t: 40, r: 40, b: 40, l: 40}
+        margin: { t: 40, r: 40, b: 40, l: 40 }
     };
-    
+
     Plotly.newPlot(containerId, [], layout);
 }
 
@@ -271,7 +271,7 @@ function updateChart(containerId, data, layout) {
  */
 function formatTimestamp(timestamp) {
     if (!timestamp) return '--';
-    
+
     const date = new Date(timestamp);
     return date.toLocaleString();
 }
@@ -281,16 +281,16 @@ function formatTimestamp(timestamp) {
  */
 function formatTimeAgo(timestamp) {
     if (!timestamp) return '--';
-    
+
     const now = new Date();
     const time = new Date(timestamp);
     const diff = now - time;
-    
+
     const seconds = Math.floor(diff / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-    
+
     if (days > 0) return `${days}d ago`;
     if (hours > 0) return `${hours}h ago`;
     if (minutes > 0) return `${minutes}m ago`;
@@ -328,7 +328,7 @@ function getSeverityIcon(severity) {
  */
 function formatNumber(num, precision = 2) {
     if (num === null || num === undefined) return '--';
-    
+
     if (num >= 1000000) {
         return (num / 1000000).toFixed(precision) + 'M';
     } else if (num >= 1000) {
@@ -345,7 +345,7 @@ function validateData(data, requiredFields = []) {
     if (!data || typeof data !== 'object') {
         return false;
     }
-    
+
     return requiredFields.every(field => field in data);
 }
 
@@ -369,7 +369,7 @@ function debounce(func, wait) {
  */
 function throttle(func, limit) {
     let inThrottle;
-    return function() {
+    return function () {
         const args = arguments;
         const context = this;
         if (!inThrottle) {
@@ -444,17 +444,17 @@ window.CyberSecDrift = {
     hideLoading,
     showNotification,
     checkSystemStatus,
-    
+
     // API functions
     apiRequest,
     getDriftSimulation,
     getVisualizationData,
     acknowledgeAlert,
-    
+
     // Chart functions
     createEmptyChart,
     updateChart,
-    
+
     // Utility functions
     formatTimestamp,
     formatTimeAgo,
