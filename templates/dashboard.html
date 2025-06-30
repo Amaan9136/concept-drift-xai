@@ -104,10 +104,10 @@
                     <div class="col-md-6">
                         <h6>System Actions</h6>
                         <div class="btn-group d-flex" role="group">
-                            <button type="button" class="btn btn-success" onclick="initializeSystem()">
+                            <button type="button" class="btn btn-success" onclick="initializeSystemAction()">
                                 <i class="fas fa-power-off me-1"></i>Initialize
                             </button>
-                            <button type="button" class="btn btn-info" onclick="retrainModel()">
+                            <button type="button" class="btn btn-info" onclick="retrainModelAction()">
                                 <i class="fas fa-sync-alt me-1"></i>Retrain Model
                             </button>
                             <button type="button" class="btn btn-secondary" onclick="refreshDashboard()">
@@ -222,7 +222,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="acknowledgeAlert()">Acknowledge</button>
+                <button type="button" class="btn btn-primary" onclick="acknowledgeCurrentAlert()">Acknowledge</button>
             </div>
         </div>
     </div>
@@ -234,9 +234,11 @@
 // Dashboard-specific JavaScript
 let dashboardData = {};
 let alertCount = 0;
+let currentAlertId = null;
 
 // Initialize dashboard
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Dashboard initializing...');
     loadDashboardData();
     setInterval(loadDashboardData, 30000); // Refresh every 30 seconds
 });
@@ -248,23 +250,37 @@ async function loadDashboardData() {
         if (response.ok) {
             dashboardData = await response.json();
             updateDashboard();
+        } else {
+            console.error('Failed to load dashboard data:', response.statusText);
+            // Show empty charts with error message
+            createEmptyChart('driftTimelineChart', 'Unable to load drift timeline data');
+            createEmptyChart('featureStatusGrid', 'Unable to load feature status data');
         }
     } catch (error) {
         console.error('Error loading dashboard data:', error);
+        createEmptyChart('driftTimelineChart', 'Error loading drift timeline data');
+        createEmptyChart('featureStatusGrid', 'Error loading feature status data');
     }
 }
 
 // Update dashboard elements
 function updateDashboard() {
-    // Update alerts
-    updateAlerts();
-    
-    // Update charts
-    updateDriftTimeline();
-    updateFeatureStatus();
-    
-    // Update metrics
-    updateSystemMetrics();
+    try {
+        // Update alerts
+        updateAlerts();
+        
+        // Update charts
+        updateDriftTimeline();
+        updateFeatureStatus();
+        
+        // Update metrics
+        updateSystemMetrics();
+        
+        console.log('Dashboard updated successfully');
+    } catch (error) {
+        console.error('Error updating dashboard:', error);
+        showNotification('error', 'Failed to update dashboard');
+    }
 }
 
 // Update alerts display
@@ -272,23 +288,30 @@ function updateAlerts() {
     const alerts = dashboardData.alerts || [];
     alertCount = alerts.length;
     
-    document.getElementById('alertCount').textContent = alertCount;
-    document.getElementById('activeAlerts').textContent = alertCount;
+    // Update alert count in cards
+    const activeAlertsElement = document.getElementById('activeAlerts');
+    if (activeAlertsElement) {
+        activeAlertsElement.textContent = alertCount;
+    }
     
+    // Update alerts in sidebar
     const alertsContainer = document.getElementById('recentAlerts');
+    if (!alertsContainer) return;
+    
     if (alerts.length === 0) {
         alertsContainer.innerHTML = '<p class="text-muted text-center">No alerts to display</p>';
         return;
     }
     
     alertsContainer.innerHTML = alerts.slice(0, 5).map(alert => `
-        <div class="alert alert-${getSeverityClass(alert.severity)} alert-sm mb-2">
+        <div class="alert alert-${getSeverityClass(alert.severity)} alert-sm mb-2" 
+             onclick="showAlertDetails('${alert.id}')" style="cursor: pointer;">
             <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <strong>${alert.feature}</strong>
-                    <br><small>${alert.message}</small>
+                    <strong>${alert.feature || 'System'}</strong>
+                    <br><small>${alert.message || 'No message'}</small>
                 </div>
-                <small class="text-muted">${formatTime(alert.timestamp)}</small>
+                <small class="text-muted">${formatTimeAgo(alert.timestamp)}</small>
             </div>
         </div>
     `).join('');
@@ -299,21 +322,19 @@ function updateDriftTimeline() {
     const timelineData = dashboardData.drift_timeline || [];
     
     if (timelineData.length === 0) {
-        Plotly.newPlot('driftTimelineChart', [], {
-            title: 'No drift data available',
-            height: 400
-        });
+        createEmptyChart('driftTimelineChart', 'No drift data available yet. Run a simulation to see results.');
         return;
     }
     
     const trace = {
         x: timelineData.map(d => d.timestamp),
-        y: timelineData.map(d => d.features_affected),
+        y: timelineData.map(d => d.features_affected || 0),
         type: 'scatter',
         mode: 'lines+markers',
         name: 'Features Affected',
         line: {color: '#007bff', width: 3},
-        marker: {size: 8}
+        marker: {size: 8},
+        hovertemplate: 'Time: %{x}<br>Features Affected: %{y}<extra></extra>'
     };
     
     const layout = {
@@ -321,37 +342,103 @@ function updateDriftTimeline() {
         xaxis: {title: 'Time'},
         yaxis: {title: 'Features Affected'},
         height: 400,
-        margin: {t: 40, r: 40, b: 40, l: 60}
+        margin: {t: 40, r: 40, b: 60, l: 60},
+        hovermode: 'closest'
     };
     
-    Plotly.newPlot('driftTimelineChart', [trace], layout);
+    updateChart('driftTimelineChart', [trace], layout);
 }
 
 // Update feature status
 function updateFeatureStatus() {
     const featureStatus = dashboardData.feature_status || {};
     
+    // Update individual feature badges
     Object.keys(featureStatus).forEach(feature => {
         const status = featureStatus[feature];
         const badge = document.getElementById(`status-${feature}`);
         
         if (badge) {
             badge.className = `badge rounded-pill bg-${getSeverityClass(status.severity)}`;
-            badge.textContent = status.severity;
+            badge.textContent = status.severity || 'OK';
         }
     });
+    
+    // Create feature status grid chart
+    if (Object.keys(featureStatus).length === 0) {
+        createEmptyChart('featureStatusGrid', 'No feature status data available. Initialize system and run simulations.');
+        return;
+    }
+    
+    const features = Object.keys(featureStatus);
+    const severities = features.map(f => featureStatus[f].severity);
+    const psiScores = features.map(f => featureStatus[f].psi_score || 0);
+    
+    // Create a bar chart for feature status
+    const trace = {
+        x: features.map(f => f.replace(/_/g, ' ')),
+        y: psiScores,
+        type: 'bar',
+        marker: {
+            color: severities.map(s => {
+                switch(s) {
+                    case 'HIGH': return '#dc3545';
+                    case 'MEDIUM': return '#ffc107';
+                    case 'LOW': return '#28a745';
+                    default: return '#6c757d';
+                }
+            })
+        },
+        hovertemplate: 'Feature: %{x}<br>PSI Score: %{y:.3f}<br>Severity: %{customdata}<extra></extra>',
+        customdata: severities
+    };
+    
+    const layout = {
+        title: 'Feature Status Overview',
+        xaxis: {title: 'Features', tickangle: 45},
+        yaxis: {title: 'PSI Score'},
+        height: 400,
+        margin: {t: 40, r: 40, b: 120, l: 60}
+    };
+    
+    updateChart('featureStatusGrid', [trace], layout);
 }
 
 // Update system metrics
 function updateSystemMetrics() {
-    document.getElementById('lastUpdate').textContent = formatTime(new Date().toISOString());
-    document.getElementById('processingTime').textContent = '< 1s';
-    document.getElementById('dataPoints').textContent = '1,000+';
+    const lastUpdateElement = document.getElementById('lastUpdate');
+    const processingTimeElement = document.getElementById('processingTime');
+    const dataPointsElement = document.getElementById('dataPoints');
+    const modelAccuracyElement = document.getElementById('modelAccuracy');
+    
+    if (lastUpdateElement) {
+        lastUpdateElement.textContent = formatTimestamp(new Date().toISOString());
+    }
+    
+    if (processingTimeElement) {
+        processingTimeElement.textContent = '< 1s';
+    }
+    
+    if (dataPointsElement) {
+        const alertCount = dashboardData.alerts ? dashboardData.alerts.length : 0;
+        dataPointsElement.textContent = formatNumber(alertCount + 1000);
+    }
+    
+    if (modelAccuracyElement) {
+        const performance = dashboardData.model_performance;
+        if (performance && performance.length > 0) {
+            const latestPerformance = performance[performance.length - 1];
+            const accuracy = latestPerformance.accuracy;
+            if (accuracy !== undefined) {
+                modelAccuracyElement.textContent = (accuracy * 100).toFixed(1) + '%';
+            }
+        }
+    }
 }
 
 // Simulate drift
 async function simulateDrift(driftType) {
-    showLoading();
+    showLoading(`Simulating ${driftType} drift...`);
     
     try {
         const response = await fetch('/api/drift/simulate', {
@@ -364,53 +451,48 @@ async function simulateDrift(driftType) {
         
         if (response.ok) {
             const result = await response.json();
-            showAlert('success', `${driftType.charAt(0).toUpperCase() + driftType.slice(1)} drift simulation completed`);
-            loadDashboardData(); // Refresh dashboard
+            if (result.success) {
+                showNotification('success', `${driftType.charAt(0).toUpperCase() + driftType.slice(1)} drift simulation completed`);
+                // Refresh dashboard data
+                await loadDashboardData();
+            } else {
+                throw new Error(result.error || 'Simulation failed');
+            }
         } else {
-            showAlert('error', 'Failed to simulate drift');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
         }
     } catch (error) {
-        showAlert('error', 'Error simulating drift: ' + error.message);
+        console.error('Drift simulation error:', error);
+        showNotification('error', 'Failed to simulate drift: ' + error.message);
     } finally {
         hideLoading();
     }
 }
 
-// Initialize system
-async function initializeSystem() {
-    showLoading();
+// Initialize system action
+async function initializeSystemAction() {
+    showLoading('Initializing system...');
     
     try {
-        const response = await fetch('/api/system/initialize', {method: 'POST'});
-        if (response.ok) {
-            const result = await response.json();
-            showAlert('success', 'System initialized successfully');
-            loadDashboardData();
-        } else {
-            showAlert('error', 'Failed to initialize system');
-        }
+        await initializeSystem();
+        await loadDashboardData();
     } catch (error) {
-        showAlert('error', 'Error initializing system: ' + error.message);
+        // Error already handled in initializeSystem
     } finally {
         hideLoading();
     }
 }
 
-// Retrain model
-async function retrainModel() {
-    showLoading();
+// Retrain model action
+async function retrainModelAction() {
+    showLoading('Retraining model...');
     
     try {
-        const response = await fetch('/api/model/retrain', {method: 'POST'});
-        if (response.ok) {
-            const result = await response.json();
-            showAlert('success', 'Model retrained successfully');
-            loadDashboardData();
-        } else {
-            showAlert('error', 'Failed to retrain model');
-        }
+        await retrainModel();
+        await loadDashboardData();
     } catch (error) {
-        showAlert('error', 'Error retraining model: ' + error.message);
+        // Error already handled in retrainModel
     } finally {
         hideLoading();
     }
@@ -418,39 +500,81 @@ async function retrainModel() {
 
 // Refresh dashboard
 function refreshDashboard() {
-    loadDashboardData();
-    showAlert('info', 'Dashboard refreshed');
+    showLoading('Refreshing dashboard...');
+    loadDashboardData().then(() => {
+        hideLoading();
+        showNotification('info', 'Dashboard refreshed');
+    }).catch((error) => {
+        hideLoading();
+        showNotification('error', 'Failed to refresh dashboard');
+    });
 }
 
-// Helper functions
-function getSeverityClass(severity) {
-    const severityMap = {
-        'LOW': 'success',
-        'MEDIUM': 'warning', 
-        'HIGH': 'danger'
-    };
-    return severityMap[severity] || 'secondary';
-}
-
-function formatTime(timestamp) {
-    return new Date(timestamp).toLocaleTimeString();
-}
-
-function showAlert(type, message) {
-    // Create and show bootstrap alert
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
+// Show alert details
+function showAlertDetails(alertId) {
+    currentAlertId = alertId;
+    const alert = dashboardData.alerts.find(a => a.id === alertId);
     
-    document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.row'));
+    if (!alert) {
+        showNotification('error', 'Alert not found');
+        return;
+    }
     
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-        alertDiv.remove();
-    }, 5000);
+    const modalBody = document.getElementById('alertModalBody');
+    if (modalBody) {
+        modalBody.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Alert Information</h6>
+                    <table class="table table-sm">
+                        <tr><td><strong>Feature:</strong></td><td>${alert.feature || 'N/A'}</td></tr>
+                        <tr><td><strong>Severity:</strong></td><td><span class="badge bg-${getSeverityClass(alert.severity)}">${alert.severity}</span></td></tr>
+                        <tr><td><strong>PSI Score:</strong></td><td>${alert.psi_score ? alert.psi_score.toFixed(3) : 'N/A'}</td></tr>
+                        <tr><td><strong>Timestamp:</strong></td><td>${formatTimestamp(alert.timestamp)}</td></tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Message</h6>
+                    <p class="text-muted">${alert.message || 'No additional details available'}</p>
+                    
+                    <h6>Status</h6>
+                    <p class="text-muted">${alert.acknowledged ? 'Acknowledged' : 'Pending acknowledgment'}</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Show modal
+    const alertModal = document.getElementById('alertModal');
+    if (alertModal && typeof bootstrap !== 'undefined') {
+        const modal = new bootstrap.Modal(alertModal);
+        modal.show();
+    }
+}
+
+// Acknowledge current alert
+async function acknowledgeCurrentAlert() {
+    if (!currentAlertId) {
+        showNotification('error', 'No alert selected');
+        return;
+    }
+    
+    try {
+        const result = await acknowledgeAlert(currentAlertId);
+        if (result.success) {
+            showNotification('success', 'Alert acknowledged');
+            // Close modal
+            const alertModal = document.getElementById('alertModal');
+            if (alertModal && typeof bootstrap !== 'undefined') {
+                const modal = bootstrap.Modal.getInstance(alertModal);
+                if (modal) modal.hide();
+            }
+            // Refresh data
+            await loadDashboardData();
+        }
+    } catch (error) {
+        showNotification('error', 'Failed to acknowledge alert: ' + error.message);
+    }
 }
 </script>
 {% endblock %}

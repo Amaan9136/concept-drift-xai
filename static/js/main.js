@@ -6,6 +6,7 @@
 let loadingModal;
 let systemData = {};
 let refreshInterval;
+let isLoading = false;
 
 // Initialize on DOM content loaded
 document.addEventListener('DOMContentLoaded', function () {
@@ -16,14 +17,26 @@ document.addEventListener('DOMContentLoaded', function () {
  * Initialize the application
  */
 function initializeApp() {
+    console.log('Initializing Cybersecurity Drift Detection System...');
+    
     // Initialize Bootstrap components
-    loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    try {
+        // Check if Bootstrap modal is available
+        const loadingModalElement = document.getElementById('loadingModal');
+        if (loadingModalElement && typeof bootstrap !== 'undefined') {
+            loadingModal = new bootstrap.Modal(loadingModalElement);
+        }
 
-    // Initialize tooltips
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
+        // Initialize tooltips
+        if (typeof bootstrap !== 'undefined') {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+    } catch (error) {
+        console.warn('Bootstrap components initialization failed:', error);
+    }
 
     // Check system status
     checkSystemStatus();
@@ -33,6 +46,8 @@ function initializeApp() {
 
     // Add event listeners
     setupEventListeners();
+    
+    console.log('Application initialized successfully');
 }
 
 /**
@@ -44,10 +59,13 @@ async function checkSystemStatus() {
         if (response.ok) {
             const status = await response.json();
             updateSystemStatus(status);
+        } else {
+            console.error('Failed to fetch system status:', response.statusText);
+            updateSystemStatus({ initialized: false, error: true, errorMessage: 'Failed to connect to server' });
         }
     } catch (error) {
         console.error('Error checking system status:', error);
-        updateSystemStatus({ initialized: false, error: true });
+        updateSystemStatus({ initialized: false, error: true, errorMessage: error.message });
     }
 }
 
@@ -57,24 +75,40 @@ async function checkSystemStatus() {
 function updateSystemStatus(status) {
     const statusIcon = document.getElementById('systemStatus');
     const statusText = document.getElementById('systemStatusText');
+    const statusCard = document.getElementById('systemStatusCard');
 
-    if (!statusIcon || !statusText) return;
+    // Update navbar status
+    if (statusIcon && statusText) {
+        if (status.initialized) {
+            statusIcon.className = 'fas fa-circle text-success me-1';
+            statusText.textContent = 'System Ready';
+        } else if (status.error) {
+            statusIcon.className = 'fas fa-circle text-danger me-1';
+            statusText.textContent = 'System Error';
+        } else {
+            statusIcon.className = 'fas fa-circle text-warning me-1';
+            statusText.textContent = 'Initializing...';
+        }
+    }
 
-    if (status.initialized) {
-        statusIcon.className = 'fas fa-circle text-success me-1';
-        statusText.textContent = 'System Ready';
-    } else if (status.error) {
-        statusIcon.className = 'fas fa-circle text-danger me-1';
-        statusText.textContent = 'System Error';
-    } else {
-        statusIcon.className = 'fas fa-circle text-warning me-1';
-        statusText.textContent = 'Initializing...';
+    // Update dashboard card if exists
+    if (statusCard) {
+        if (status.initialized) {
+            statusCard.textContent = 'Ready';
+        } else if (status.error) {
+            statusCard.textContent = 'Error';
+        } else {
+            statusCard.textContent = 'Initializing...';
+        }
     }
 
     // Update alert count if available
     if (status.alerts_count !== undefined) {
         updateAlertCount(status.alerts_count);
     }
+
+    // Store status globally
+    systemData.status = status;
 }
 
 /**
@@ -83,7 +117,7 @@ function updateSystemStatus(status) {
 function updateAlertCount(count) {
     const alertBadge = document.getElementById('alertCount');
     if (alertBadge) {
-        alertBadge.textContent = count;
+        alertBadge.textContent = count || 0;
         alertBadge.className = count > 0 ? 'badge bg-danger' : 'badge bg-secondary';
     }
 }
@@ -91,9 +125,22 @@ function updateAlertCount(count) {
 /**
  * Show loading modal
  */
-function showLoading() {
+function showLoading(message = 'Processing request...') {
+    if (isLoading) return;
+    
+    isLoading = true;
+    
+    // Update loading message if element exists
+    const loadingMessage = document.querySelector('#loadingModal .modal-body p');
+    if (loadingMessage) {
+        loadingMessage.textContent = message;
+    }
+    
     if (loadingModal) {
         loadingModal.show();
+    } else {
+        // Fallback: create a simple loading indicator
+        createFallbackLoader(message);
     }
 }
 
@@ -101,9 +148,39 @@ function showLoading() {
  * Hide loading modal
  */
 function hideLoading() {
+    isLoading = false;
+    
     if (loadingModal) {
         loadingModal.hide();
+    } else {
+        // Remove fallback loader
+        const fallbackLoader = document.getElementById('fallback-loader');
+        if (fallbackLoader) {
+            fallbackLoader.remove();
+        }
     }
+}
+
+/**
+ * Create fallback loader
+ */
+function createFallbackLoader(message) {
+    const existingLoader = document.getElementById('fallback-loader');
+    if (existingLoader) return;
+    
+    const loader = document.createElement('div');
+    loader.id = 'fallback-loader';
+    loader.className = 'loading-overlay';
+    loader.innerHTML = `
+        <div class="text-center text-white">
+            <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>${message}</p>
+        </div>
+    `;
+    
+    document.body.appendChild(loader);
 }
 
 /**
@@ -115,6 +192,7 @@ function showNotification(type, message, duration = 5000) {
     notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
     notification.style.cssText = 'top: 100px; right: 20px; z-index: 1050; min-width: 300px;';
     notification.innerHTML = `
+        <i class="fas fa-${getNotificationIcon(type)} me-2"></i>
         ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
@@ -128,6 +206,20 @@ function showNotification(type, message, duration = 5000) {
             notification.remove();
         }
     }, duration);
+}
+
+/**
+ * Get notification icon
+ */
+function getNotificationIcon(type) {
+    const icons = {
+        'success': 'check-circle',
+        'error': 'exclamation-circle',
+        'warning': 'exclamation-triangle',
+        'info': 'info-circle',
+        'danger': 'times-circle'
+    };
+    return icons[type] || 'info-circle';
 }
 
 /**
@@ -148,18 +240,22 @@ function setupEventListeners() {
             e.preventDefault();
             if (typeof refreshDashboard === 'function') {
                 refreshDashboard();
+            } else {
+                location.reload();
             }
         }
 
         // Escape to close modals
         if (e.key === 'Escape') {
-            const modals = document.querySelectorAll('.modal.show');
-            modals.forEach(modal => {
-                const modalInstance = bootstrap.Modal.getInstance(modal);
-                if (modalInstance) {
-                    modalInstance.hide();
-                }
-            });
+            if (typeof bootstrap !== 'undefined') {
+                const modals = document.querySelectorAll('.modal.show');
+                modals.forEach(modal => {
+                    const modalInstance = bootstrap.Modal.getInstance(modal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                });
+            }
         }
     });
 }
@@ -173,16 +269,19 @@ function setupEventListeners() {
  */
 async function apiRequest(url, options = {}) {
     try {
-        const response = await fetch(url, {
+        const defaultOptions = {
             headers: {
                 'Content-Type': 'application/json',
                 ...options.headers
             },
             ...options
-        });
+        };
 
+        const response = await fetch(url, defaultOptions);
+        
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
         }
 
         return await response.json();
@@ -219,6 +318,43 @@ async function acknowledgeAlert(alertId) {
 }
 
 /**
+ * Initialize system
+ */
+async function initializeSystem() {
+    try {
+        const result = await apiRequest('/api/system/initialize', { method: 'POST' });
+        if (result.success) {
+            showNotification('success', 'System initialized successfully');
+            await checkSystemStatus();
+        } else {
+            throw new Error(result.message || 'Initialization failed');
+        }
+        return result;
+    } catch (error) {
+        showNotification('error', 'Failed to initialize system: ' + error.message);
+        throw error;
+    }
+}
+
+/**
+ * Retrain model
+ */
+async function retrainModel() {
+    try {
+        const result = await apiRequest('/api/model/retrain', { method: 'POST' });
+        if (result.success) {
+            showNotification('success', 'Model retrained successfully');
+        } else {
+            throw new Error(result.error || 'Retraining failed');
+        }
+        return result;
+    } catch (error) {
+        showNotification('error', 'Failed to retrain model: ' + error.message);
+        throw error;
+    }
+}
+
+/**
  * Chart Helper Functions
  */
 
@@ -226,6 +362,12 @@ async function acknowledgeAlert(alertId) {
  * Create empty chart
  */
 function createEmptyChart(containerId, message = 'No data available') {
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.warn(`Chart container ${containerId} not found`);
+        return;
+    }
+
     const layout = {
         title: message,
         xaxis: { visible: false },
@@ -245,7 +387,11 @@ function createEmptyChart(containerId, message = 'No data available') {
         margin: { t: 40, r: 40, b: 40, l: 40 }
     };
 
-    Plotly.newPlot(containerId, [], layout);
+    if (typeof Plotly !== 'undefined') {
+        Plotly.newPlot(containerId, [], layout);
+    } else {
+        container.innerHTML = `<div class="d-flex align-items-center justify-content-center h-100 text-muted">${message}</div>`;
+    }
 }
 
 /**
@@ -253,8 +399,16 @@ function createEmptyChart(containerId, message = 'No data available') {
  */
 function updateChart(containerId, data, layout) {
     try {
-        if (document.getElementById(containerId)) {
+        const container = document.getElementById(containerId);
+        if (!container) {
+            console.warn(`Chart container ${containerId} not found`);
+            return;
+        }
+
+        if (typeof Plotly !== 'undefined') {
             Plotly.react(containerId, data, layout);
+        } else {
+            console.warn('Plotly not available for chart updates');
         }
     } catch (error) {
         console.error(`Error updating chart ${containerId}:`, error);
@@ -272,8 +426,12 @@ function updateChart(containerId, data, layout) {
 function formatTimestamp(timestamp) {
     if (!timestamp) return '--';
 
-    const date = new Date(timestamp);
-    return date.toLocaleString();
+    try {
+        const date = new Date(timestamp);
+        return date.toLocaleString();
+    } catch (error) {
+        return '--';
+    }
 }
 
 /**
@@ -282,19 +440,23 @@ function formatTimestamp(timestamp) {
 function formatTimeAgo(timestamp) {
     if (!timestamp) return '--';
 
-    const now = new Date();
-    const time = new Date(timestamp);
-    const diff = now - time;
+    try {
+        const now = new Date();
+        const time = new Date(timestamp);
+        const diff = now - time;
 
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
 
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return `${seconds}s ago`;
+        if (days > 0) return `${days}d ago`;
+        if (hours > 0) return `${hours}h ago`;
+        if (minutes > 0) return `${minutes}m ago`;
+        return `${seconds}s ago`;
+    } catch (error) {
+        return '--';
+    }
 }
 
 /**
@@ -381,36 +543,25 @@ function throttle(func, limit) {
 }
 
 /**
- * Local Storage Helpers
- */
-function saveToLocalStorage(key, data) {
-    try {
-        localStorage.setItem(key, JSON.stringify(data));
-        return true;
-    } catch (error) {
-        console.error('Error saving to localStorage:', error);
-        return false;
-    }
-}
-
-function loadFromLocalStorage(key, defaultValue = null) {
-    try {
-        const item = localStorage.getItem(key);
-        return item ? JSON.parse(item) : defaultValue;
-    } catch (error) {
-        console.error('Error loading from localStorage:', error);
-        return defaultValue;
-    }
-}
-
-/**
  * Copy text to clipboard
  */
 async function copyToClipboard(text) {
     try {
-        await navigator.clipboard.writeText(text);
-        showNotification('success', 'Copied to clipboard');
-        return true;
+        if (navigator.clipboard) {
+            await navigator.clipboard.writeText(text);
+            showNotification('success', 'Copied to clipboard');
+            return true;
+        } else {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showNotification('success', 'Copied to clipboard');
+            return true;
+        }
     } catch (error) {
         console.error('Error copying to clipboard:', error);
         showNotification('error', 'Failed to copy to clipboard');
@@ -422,17 +573,37 @@ async function copyToClipboard(text) {
  * Download data as JSON file
  */
 function downloadJSON(data, filename = 'data.json') {
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: 'application/json'
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    try {
+        const blob = new Blob([JSON.stringify(data, null, 2)], {
+            type: 'application/json'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showNotification('success', `Downloaded ${filename}`);
+    } catch (error) {
+        console.error('Error downloading file:', error);
+        showNotification('error', 'Failed to download file');
+    }
+}
+
+/**
+ * Handle errors gracefully
+ */
+function handleError(error, context = 'Operation') {
+    console.error(`${context} failed:`, error);
+    
+    let message = error.message || 'An unexpected error occurred';
+    if (message.includes('fetch')) {
+        message = 'Unable to connect to server. Please check your connection.';
+    }
+    
+    showNotification('error', `${context} failed: ${message}`);
 }
 
 /**
@@ -444,6 +615,8 @@ window.CyberSecDrift = {
     hideLoading,
     showNotification,
     checkSystemStatus,
+    initializeSystem,
+    retrainModel,
 
     // API functions
     apiRequest,
@@ -464,10 +637,9 @@ window.CyberSecDrift = {
     validateData,
     debounce,
     throttle,
-    saveToLocalStorage,
-    loadFromLocalStorage,
     copyToClipboard,
-    downloadJSON
+    downloadJSON,
+    handleError
 };
 
 // Export individual functions to global scope for backward compatibility
@@ -476,3 +648,9 @@ window.hideLoading = hideLoading;
 window.showNotification = showNotification;
 window.getSeverityClass = getSeverityClass;
 window.formatTimestamp = formatTimestamp;
+window.formatTimeAgo = formatTimeAgo;
+window.initializeSystem = initializeSystem;
+window.retrainModel = retrainModel;
+window.getDriftSimulation = getDriftSimulation;
+window.createEmptyChart = createEmptyChart;
+window.updateChart = updateChart;
